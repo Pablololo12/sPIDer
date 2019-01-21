@@ -1,0 +1,4 @@
+config HWCOUNTER
+tristate "Driver for hardware counters"
+help
+  A driver that reads and expose hardware counters
