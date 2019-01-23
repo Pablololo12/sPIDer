@@ -41,23 +41,29 @@ void *calculate_eigen_aux(void *arg)
 }
 
 
-double calculate_eigen(int num_threads, int matrix_size)
+double calculate_eigen(int num_threads, int matrix_size, int iter)
 {
 	pthread_t threads[num_threads];
-	int i;
-
-	for(i=0;i<num_threads;i++) {
-		pthread_create(&threads[i], NULL, calculate_eigen_aux, (void *) matrix_size);
-	}
-
+	int i, d;
 	double time = 0.0;
-	for(i=0;i<num_threads;i++) {
-		struct thread_result *resp;
-		pthread_join(threads[i],(void**)&resp);
-		time = time + resp->time;
-		free(resp);
+	double t0, t1;
+
+	t0 = now_ms();
+	for (d=0; d<iter; d++) {
+		time = 0.0;
+		for (i=0;i<num_threads;i++) {
+			pthread_create(&threads[i], NULL, calculate_eigen_aux, (void *) matrix_size);
+		}
+		for(i=0;i<num_threads;i++) {
+			struct thread_result *resp;
+			pthread_join(threads[i],(void**)&resp);
+			time = time + resp->time;
+			free(resp);
+		}
+		printf("%f\n",time/num_threads);
 	}
-	return time/num_threads;
+	t1 = now_ms();
+	return t1-t0;
 }
 
 int check_affinity()
@@ -85,7 +91,7 @@ int main (int argc, char **argv)
 	char *aux;
 	cpu_set_t mask;
 
-	while ((opt = getopt (argc, argv, "t:m:c:")) != -1){
+	while ((opt = getopt (argc, argv, "t:m:c:i:")) != -1){
 		switch(opt) {
 			case 't':
 				num_threads = atoi(optarg);
@@ -115,7 +121,7 @@ int main (int argc, char **argv)
 		//check_affinity();
 	}
 
-	calculate_eigen(num_threads,matrix_size,iter);
-	//printf("%f\n",time_eigen);
+	time_eigen = calculate_eigen(num_threads,matrix_size,iter);
+	printf("%f\n",time_eigen);
 	return 0;
 }

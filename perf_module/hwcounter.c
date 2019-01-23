@@ -196,7 +196,7 @@ static ssize_t type_show(struct kobject *kobj, struct kobj_attribute *attr,
 			inst_aux += inst_count[i];
 		}
 	}
-	type_of_program = predictor(mem_aux,simd_aux,inst_aux);
+	type_of_program = predictor_int(mem_aux,simd_aux,inst_aux);
 	return sprintf(buf, "%d\n", type_of_program);
 }
 
