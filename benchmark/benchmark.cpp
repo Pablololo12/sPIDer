@@ -40,7 +40,6 @@ void *calculate_eigen_aux(void *arg)
 	pthread_exit(tr);
 }
 
-
 double calculate_eigen(int num_threads, int matrix_size, int iter)
 {
 	pthread_t threads[num_threads];

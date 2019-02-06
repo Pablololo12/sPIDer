@@ -8,6 +8,8 @@
 #include <linux/sched.h>
 #include <linux/smp.h>
 #include <linux/perf_event.h>
+#include <linux/notifier.h>
+#include <linux/cpu.h>
 
 // Definitions for hw counters
 #define ASE_SPEC 0x74
@@ -45,6 +47,8 @@ static DECLARE_DELAYED_WORK(task, periodic_task);
 
 // Declaration of hw perf counter
 static int hwcounter_perf_event_initialize(int cpu);
+
+static void free_counters(int cpu);
 
 // Fast product by 100
 inline s64 fast_100(s64 n)
@@ -117,10 +121,19 @@ static void read_from_registers(void)
 
 	for (i=0; i<num_a73; i++) {
 		aux = a73_id[i];
-		if (IS_ERR(pe[aux][0]))
-			hwcounter_perf_event_initialize(a73_id[i]);
-		if (IS_ERR(pe[aux][0]))
+		/*if (!cpu_online(aux) && !IS_ERR(pe[aux][0])) {
+			free_counters(aux);
+			pe[aux][0] = (struct perf_event *) -1;
 			continue;
+		}*/
+		if (!cpu_online(aux))
+			continue;
+		if (IS_ERR(pe[aux][0]) || pe[aux][0]==NULL)
+			hwcounter_perf_event_initialize(a73_id[i]);
+		if (IS_ERR(pe[aux][0])) {
+			printk(KERN_INFO "DEBUG HWCOUNTER: CPU %d Error %ld\n",aux,PTR_ERR(pe[aux][0]));
+			continue;
+		}
 		total = (u32) perf_event_read_value(pe[aux][0], &enabled, &running);
 		inst_count[aux] = total - inst_count_prev[aux];
 		inst_count_prev[aux] = total;
@@ -228,6 +241,31 @@ static struct perf_event_attr pea_MEM_ACCESS = {
 	.disabled	= 0
 };
 
+static int
+cpu_callback(struct notifier_block *nfb, unsigned long action, void *hcpu)
+{
+	int hotcpu = (unsigned long)hcpu;
+	switch (action) {
+	case CPU_UP_PREPARE:
+	case CPU_UP_PREPARE_FROZEN:
+	case CPU_ONLINE:
+	case CPU_ONLINE_FROZEN:
+		//hwcounter_perf_event_initialize(hotcpu);
+		break;
+	case CPU_UP_CANCELED:
+	case CPU_UP_CANCELED_FROZEN:
+	case CPU_DEAD:
+	case CPU_DEAD_FROZEN:
+		free_counters(hotcpu);
+		break;
+	}
+	return NOTIFY_OK;
+}
+
+static struct notifier_block cpu_nfb = {
+	.notifier_call = cpu_callback
+};
+
 static void initialize_registers(void * v)
 {
 	u32 val, model;
@@ -249,14 +287,18 @@ static void initialize_registers(void * v)
 
 static int hwcounter_perf_event_initialize(int cpu)
 {
+	printk(KERN_INFO "DEBUG HWCOUNTER: Initializing perf event for CPU: %d\n",
+			cpu);
 	pe[cpu][0] = perf_event_create_kernel_counter(&pea_INST_RETIRED,cpu,
 							NULL,NULL,NULL);
 	if (IS_ERR(pe[cpu][0]))
 		return PTR_ERR(pe[cpu][0]);
+
 	pe[cpu][1] = perf_event_create_kernel_counter(&pea_MEM_ACCESS,cpu,
 							NULL,NULL,NULL);
 	if (IS_ERR(pe[cpu][1]))
 		return PTR_ERR(pe[cpu][1]);
+
 	pe[cpu][2] = perf_event_create_kernel_counter(&pea_ASE_SPEC,cpu,
 							NULL,NULL,NULL);
 	if (IS_ERR(pe[cpu][2]))
@@ -268,7 +310,7 @@ static int __init hwcounter_init(void)
 {
 	int error = 0,i;
 	char is73;
-	printk(KERN_DEBUG "Initializing HWcounter module\n");
+	printk(KERN_INFO "DEBUG HWCOUNTER: Initializing HWcounter module\n");
 
 	files_kobject = kobject_create_and_add("hwcounters",kernel_kobj);
 	if(!files_kobject){
@@ -292,7 +334,7 @@ static int __init hwcounter_init(void)
 	if (error)
 		goto delete_sysfs_exit;
 
-	printk(KERN_DEBUG "sysfs created succesfully\n");
+	printk(KERN_INFO "DEBUG HWCOUNTER: sysfs created succesfully\n");
 	on_each_cpu(initialize_registers, NULL, 1);
 
 	for (i=0; i<num_possible_cpus(); i++) {
@@ -309,7 +351,8 @@ static int __init hwcounter_init(void)
 	}
 	periodic_workqueue = create_workqueue("HWcounter_work");
 	schedule_delayed_work(&task, usecs_to_jiffies(DEF_SAMPLING_VALUE));
-	printk(KERN_DEBUG "Module initialized\n");
+	register_cpu_notifier(&cpu_nfb);
+	printk(KERN_INFO "DEBUG HWCOUNTER: Module initialized\n");
 	return 0;
 
 delete_sysfs_exit:
@@ -318,24 +361,33 @@ exit_hwcounter_init:
 	return error;
 }
 
+static void free_counters(int cpu)
+{
+	printk(KERN_INFO "DEBUG HWCOUNTER: freeing CPU: %d\n", cpu);
+	if(pe[cpu][0]!=NULL) {
+		perf_event_disable(pe[cpu][0]);
+		perf_event_release_kernel(pe[cpu][0]);
+		pe[cpu][0]=NULL;
+	}
+	if(pe[cpu][1]!=NULL) {
+		perf_event_disable(pe[cpu][1]);
+		perf_event_release_kernel(pe[cpu][1]);
+		pe[cpu][1]=NULL;
+	}
+	if(pe[cpu][2]!=NULL) {
+		perf_event_disable(pe[cpu][2]);
+		perf_event_release_kernel(pe[cpu][2]);
+		pe[cpu][2]=NULL;
+	}
+}
+
 static void delete_counters(void)
 {
 	int i;
-	printk(KERN_DEBUG "Disabling Counters\n");
+	printk(KERN_INFO "DEBUG HWCOUNTER: Disabling Counters\n");
 	
 	for(i=0; i<num_possible_cpus(); i++) {
-		if(pe[i][0]!=NULL) {
-			perf_event_disable(pe[i][0]);
-			perf_event_release_kernel(pe[i][0]);
-		}
-		if(pe[i][1]!=NULL) {
-			perf_event_disable(pe[i][1]);
-			perf_event_release_kernel(pe[i][1]);
-		}
-		if(pe[i][2]!=NULL) {
-			perf_event_disable(pe[i][2]);
-			perf_event_release_kernel(pe[i][2]);
-		}
+		free_counters(i);
 	}
 }
 
@@ -352,7 +404,7 @@ static void __exit hwcounter_exit(void)
 		kobject_put(files_kobject);
 	}
 	delete_counters();
-	printk(KERN_DEBUG "Goodbye!!\n");
+	printk(KERN_INFO "DEBUG HWCOUNTER: Goodbye!!\n");
 }
 
 MODULE_AUTHOR("Pablo Hernandez <pabloheralm@gmail.com>");
