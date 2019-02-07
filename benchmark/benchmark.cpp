@@ -34,7 +34,9 @@ void *calculate_eigen_aux(void *arg)
 	MatrixXf m2 = MatrixXf::Random(matrix_size,matrix_size);
 	MatrixXf m3 = MatrixXf::Random(matrix_size,matrix_size);
 	t0 = now_ms();
-	m1.noalias() = m2*m3;
+	// Only for characterize
+	while(1)
+		m1.noalias() = m2*m3;
 	t1 = now_ms();
 	tr->time = t1-t0;
 	pthread_exit(tr);

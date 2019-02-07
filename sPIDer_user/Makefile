@@ -1,7 +1,7 @@
-TARGET = benchmark
+TARGET = user_governor
 # CROSS_COMPILE=aarch64-linux-gnu- make
 #
-CC=g++
+CC=gcc
 
 ifdef DEBUG
 	CFLAGS=-static -lc -g
@@ -10,7 +10,7 @@ else
 endif
 
 all:
-	$(CROSS_COMPILE)$(CC) $(CFLAGS) $(TARGET).cpp -o $(TARGET)
+	$(CROSS_COMPILE)$(CC) $(CFLAGS) src/pid.c src/controller.c src/main.c -o $(TARGET)
 
 clean:
 	rm -rf $(TARGET)
