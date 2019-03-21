@@ -4,15 +4,16 @@ TARGET = user_governor
 CC=gcc
 
 ifdef DEBUG
-	CFLAGS=-static -lc -g
+	CFLAGS=-static -lc -g -DDEBUG
 else
-	CFLAGS=-static -lc -O2
+	CFLAGS=-static -lc -O2 -DDEBUG
 endif
 
 all:
 	$(CROSS_COMPILE)$(CC) $(CFLAGS) src/pid.c src/controller.c src/main.c -o $(TARGET)
 
 clean:
-	rm -rf $(TARGET)
+	rm -rf bin/arm64/$(TARGET)
+	rm -rf bin/armeabi/$(TARGET)
 
 .PHONY: all clean

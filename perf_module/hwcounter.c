@@ -13,8 +13,12 @@
 
 // Definitions for hw counters
 #define ASE_SPEC 0x74
+#define LD_ST 0x72
+#define INT_INST 0x73
 #define MEM_ACCESS 0x13
 #define INST_RETIRED 0x08
+#define BR_PRED 0x12
+#define BR_MIS_PRED 0x10
 #define DEF_SAMPLING_VALUE (1000000)
 
 // Vars for classifiying type of program
@@ -31,10 +35,13 @@ static struct kobject *files_kobject;
 static u32 simd_count[NR_CPUS] = {0};
 static u32 mem_count[NR_CPUS] = {0};
 static u32 inst_count[NR_CPUS] = {0};
+static u32 int_count[NR_CPUS] = {0};
+
 static u32 simd_count_prev[NR_CPUS] = {0};
 static u32 mem_count_prev[NR_CPUS] = {0};
 static u32 inst_count_prev[NR_CPUS] = {0};
-static struct perf_event *pe[NR_CPUS][3];
+static u32 int_count_prev[NR_CPUS] = {0};
+static struct perf_event *pe[NR_CPUS][4];
 static DEFINE_PER_CPU(char, is_a73);
 static int die_hw = 0;
 static int a73_id[4] = {0};
@@ -143,6 +150,9 @@ static void read_from_registers(void)
 		total = (u32) perf_event_read_value(pe[aux][2], &enabled, &running);
 		simd_count[aux] = total - simd_count_prev[aux];
 		simd_count_prev[aux] = total;
+		total = (u32) perf_event_read_value(pe[aux][3], &enabled, &running);
+		int_count[aux] = total - int_count_prev[aux];
+		int_count_prev[aux] = total;
 	}
 
 }
@@ -194,6 +204,19 @@ static ssize_t inst_show(struct kobject *kobj, struct kobj_attribute *attr,
 	return sprintf(buf, "%llu\n", aux);
 }
 
+static ssize_t int_show(struct kobject *kobj, struct kobj_attribute *attr,
+								char*buf)
+{
+	int i=0;
+	u64 aux = 0;
+	for (i=0; i<num_possible_cpus(); i++) {
+		if (cpu_online(i)) {
+			aux += int_count[i];
+		}
+	}
+	return sprintf(buf, "%llu\n", aux);
+}
+
 static ssize_t type_show(struct kobject *kobj, struct kobj_attribute *attr,
 								char *buf)
 {
@@ -219,6 +242,8 @@ static struct kobj_attribute mem_attribute =__ATTR(mem_count, 0444,
 							mem_show, NULL);
 static struct kobj_attribute inst_attribute =__ATTR(inst_count, 0444,
 							inst_show, NULL);
+static struct kobj_attribute int_attribute =__ATTR(int_count, 0444,
+							int_show, NULL);
 static struct kobj_attribute type_attribute =__ATTR(type_of_program, 0444,
 							type_show, NULL);
 
@@ -236,7 +261,13 @@ static struct perf_event_attr pea_ASE_SPEC = {
 };
 static struct perf_event_attr pea_MEM_ACCESS = {
 	.type		= PERF_TYPE_RAW,
-	.config		= MEM_ACCESS,
+	.config		= LD_ST,
+	.size		= sizeof(struct perf_event_attr),
+	.disabled	= 0
+};
+static struct perf_event_attr pea_INT_INST = {
+	.type		= PERF_TYPE_RAW,
+	.config		= INT_INST,
 	.size		= sizeof(struct perf_event_attr),
 	.disabled	= 0
 };
@@ -303,6 +334,11 @@ static int hwcounter_perf_event_initialize(int cpu)
 							NULL,NULL,NULL);
 	if (IS_ERR(pe[cpu][2]))
 		return PTR_ERR(pe[cpu][2]);
+
+	pe[cpu][3] = perf_event_create_kernel_counter(&pea_INT_INST,cpu,
+							NULL,NULL,NULL);
+	if (IS_ERR(pe[cpu][3]))
+		return PTR_ERR(pe[cpu][3]);
 	return 0;
 }
 
@@ -327,6 +363,10 @@ static int __init hwcounter_init(void)
 		goto delete_sysfs_exit;
 
 	error = sysfs_create_file(files_kobject, &inst_attribute.attr);
+	if (error)
+		goto delete_sysfs_exit;
+	
+	error = sysfs_create_file(files_kobject, &int_attribute.attr);
 	if (error)
 		goto delete_sysfs_exit;
 
@@ -378,6 +418,11 @@ static void free_counters(int cpu)
 		perf_event_disable(pe[cpu][2]);
 		perf_event_release_kernel(pe[cpu][2]);
 		pe[cpu][2]=NULL;
+	}
+	if(pe[cpu][3]!=NULL) {
+		perf_event_disable(pe[cpu][3]);
+		perf_event_release_kernel(pe[cpu][3]);
+		pe[cpu][3]=NULL;
 	}
 }
 

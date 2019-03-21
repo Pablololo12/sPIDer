@@ -12,8 +12,8 @@
  * Output:
  *  1 if ok
  */
-int init_controller(double K, double Ti, double Ts, double Tdes, double Fzero,
-		double Tzero, double feed_fordw);
+int init_controller(double K, double Ti, double Ts, double Tde, double Fzer,
+		double Tzer, double feed_fordw);
 
 /**
  * Starts the execution of the controller

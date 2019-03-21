@@ -5,11 +5,11 @@
 
 static double A = 0.0;
 static double B = 0.0;
+static double u1 = 0.0;
 
 double pid_calculate (double error)
 {
 	static double error1 = 0.0;
-	static double u1 = 0.0;
 
 	double aux = u1 + A*error + B*error1;
 
@@ -32,5 +32,11 @@ int pid_init(double K, double Ti, double Ts)
 	printf("PID Initializing\n");
 	printf("PID A: %f B: %f \n", A, B);
 #endif
+	return 1;
+}
+
+int update_freq(long freq)
+{
+	u1 = (double) freq;
 	return 1;
 }
