@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include "controller.h"
 #include "pid.h"
+#include "integral.h"
 
 #define FILE_TEMP "/sys/class/thermal/thermal_zone0/temp"
 #define PATH_TO_CPU "/sys/devices/system/cpu/cpufreq/policy4/scaling_setspeed"
@@ -54,13 +55,20 @@ static int open_files(void)
 }
 
 int init_controller(double K, double Ti, double Ts, double Tde, double Fzer,
-		double Tzer, double feed_fordw)
+		double Tzer, double feed_fordw, double K_i, double Ti_i)
 {
 #ifdef DEBUG
 	int i;
 #endif
 
 	if (!pid_init(K,Ti,Ts)) {
+#ifdef DEBUG
+		fprintf(stderr,"CONTROLLER Error initializing PID\n");
+#endif
+		return 0;
+	}
+
+	if (!integral_init(K_i,Ti_i,Ts)) {
 #ifdef DEBUG
 		fprintf(stderr,"CONTROLLER Error initializing PID\n");
 #endif
@@ -149,7 +157,7 @@ select_freq:
 	return f;
 }
 
-/*
+/* Outdated
  *                                                                 +Perturbance
  *                                               +----+            |
  *                                         +---+ | FF | <----------+
@@ -169,14 +177,17 @@ int start_controller()
 {
 	double pipeL = 0.0;
 	double aux = 0.0;
+	double freq_int = 0.0;
+	double error = 0.0;
 	long f = 0.0;
 	while (1) {
 		pipeL = Tdes;
 		pipeL -= Tzero;
-		
+
 		aux = FF_temp(pipeL);
 
 		pipeL = pipeL - (read_temp() - Tzero);
+		error = pipeL;
 
 #ifdef DEBUG
 		printf("CONTROLLER Temp: %f %f \n", pipeL, -(read_temp()-Tzero));
@@ -185,13 +196,20 @@ int start_controller()
 
 		pipeL += aux;
 
+		pipeL += freq_int;
+
 		pipeL += Fzero;
 
 #ifdef DEBUG
 		printf("CONTROLLER Freq selected: %f\n", pipeL);
 #endif
 		f = select_freq(pipeL);
-		update_freq((long)f-Fzero);
+		//update_freq((long)f-Fzero);
+
+		if (abs(error) < 5.0)
+			freq_int = integral_calculate(pipeL-f);
+		else
+			freq_int = integral_calculate(0.0);
 
 		usleep(Sample);
 	}

@@ -6,11 +6,11 @@ CC=gcc
 ifdef DEBUG
 	CFLAGS=-static -lc -g -DDEBUG
 else
-	CFLAGS=-static -lc -O2 -DDEBUG
+	CFLAGS=-static -lc -O2
 endif
 
 all:
-	$(CROSS_COMPILE)$(CC) $(CFLAGS) src/pid.c src/controller.c src/main.c -o $(TARGET)
+	$(CROSS_COMPILE)$(CC) $(CFLAGS) src/pid.c src/controller.c src/integral.c src/main.c -o $(TARGET)
 
 clean:
 	rm -rf bin/arm64/$(TARGET)

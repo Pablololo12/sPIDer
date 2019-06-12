@@ -13,7 +13,7 @@
  *  1 if ok
  */
 int init_controller(double K, double Ti, double Ts, double Tde, double Fzer,
-		double Tzer, double feed_fordw);
+		double Tzer, double feed_fordw, double K_i, double ti_i);
 
 /**
  * Starts the execution of the controller

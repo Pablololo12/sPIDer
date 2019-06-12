@@ -10,6 +10,7 @@
 #include <linux/perf_event.h>
 #include <linux/notifier.h>
 #include <linux/cpu.h>
+#include "hwcounter.h"
 
 // Definitions for hw counters
 #define ASE_SPEC 0x74
@@ -22,12 +23,12 @@
 #define DEF_SAMPLING_VALUE (1000000)
 
 // Vars for classifiying type of program
-static s64 inter_int_=40;
-static s64 mem_int_=-74;
-static s64 simd_int_=-106;
-static s64 inter_mem_=-8;
-static s64 mem_mem_=11;
-static s64 simd_mem_=-45;
+static s64 inter_int_=-11;
+static s64 mem_int_=22;
+static s64 integ_int_=12;
+static s64 inter_mem_=-19;
+static s64 mem_mem_=84;
+static s64 integ_mem_=-33;
 static int type_of_program=1;
 
 // Vars to read from counters
@@ -57,6 +58,7 @@ static int hwcounter_perf_event_initialize(int cpu);
 
 static void free_counters(int cpu);
 
+
 // Fast product by 100
 inline s64 fast_100(s64 n)
 {
@@ -64,7 +66,7 @@ inline s64 fast_100(s64 n)
 }
 
 // Predict the type of program currently running globally
-int predictor_int(s64 mem, s64 simd, s64 inst)
+u32 predictor_int(s64 mem, s64 integ, s64 inst)
 {
 	s64 denomin, mem_num, int_num;
 	s64 float_pred, int_pred, mem_pred;
@@ -73,12 +75,12 @@ int predictor_int(s64 mem, s64 simd, s64 inst)
 
 	// First we obtain the percentaje in integer
 	mem = fast_100(mem)/inst;
-	simd = fast_100(simd)/inst;
+	integ = fast_100(integ)/inst;
 
 	// Here we calculate each numerator
 	// e^(beta + x1*Y1 + x2*Y2)
-	aux1 = inter_int_ + (mem * mem_int_)/100 + (simd * simd_int_)/100;
-	aux2 = inter_mem_ + (mem * mem_mem_)/100 + (simd * simd_mem_)/100;
+	aux1 = inter_int_ + (mem * mem_int_)/100 + (integ * integ_int_)/100;
+	aux2 = inter_mem_ + (mem * mem_mem_)/100 + (integ * integ_mem_)/100;
 	// With this comparations we made a fast implementation of the e number
 	if (aux1 >= 0) {
 		if (aux1 < 62) {
@@ -138,7 +140,9 @@ static void read_from_registers(void)
 		if (IS_ERR(pe[aux][0]) || pe[aux][0]==NULL)
 			hwcounter_perf_event_initialize(a73_id[i]);
 		if (IS_ERR(pe[aux][0])) {
-			printk(KERN_INFO "DEBUG HWCOUNTER: CPU %d Error %ld\n",aux,PTR_ERR(pe[aux][0]));
+			printk(KERN_INFO "DEBUG HWCOUNTER: CPU %d Error %ld\n",
+			                                                   aux,
+			                                  PTR_ERR(pe[aux][0]));
 			continue;
 		}
 		total = (u32) perf_event_read_value(pe[aux][0], &enabled, &running);
@@ -217,22 +221,29 @@ static ssize_t int_show(struct kobject *kobj, struct kobj_attribute *attr,
 	return sprintf(buf, "%llu\n", aux);
 }
 
-static ssize_t type_show(struct kobject *kobj, struct kobj_attribute *attr,
-								char *buf)
+u32 get_type_program(void)
 {
 	int i=0;
 	u64 mem_aux = 0;
-	u64 simd_aux = 0;
+	u64 int_aux = 0;
 	u64 inst_aux = 0;
 
 	for (i=0; i<num_possible_cpus(); i++) {
 		if (cpu_online(i)) {
 			mem_aux += mem_count[i];
-			simd_aux += simd_count[i];
+			int_aux += int_count[i];
 			inst_aux += inst_count[i];
 		}
 	}
-	type_of_program = predictor_int(mem_aux,simd_aux,inst_aux);
+	type_of_program = predictor_int(mem_aux,int_aux,inst_aux);
+	return type_of_program;
+}
+EXPORT_SYMBOL(get_type_program);
+
+static ssize_t type_show(struct kobject *kobj, struct kobj_attribute *attr,
+								char *buf)
+{
+	type_of_program = get_type_program();
 	return sprintf(buf, "%d\n", type_of_program);
 }
 
