@@ -19,12 +19,12 @@
 
 /* PID_governor macros */
 #define DEF_K_VALUE				(20000)
-#define DEF_TI_VALUE			(250)
-#define DEF_FF_VALUE			(32000)
+#define DEF_TI_VALUE			(180)
+#define DEF_FF_VALUE			(32)
 #define DEF_T_ZERO_VALUE		(70000)
 #define DEF_F_ZERO_VALUE		(1421000)
-#define DEF_TEMP_OBJ			(80000)
-#define DEF_SAMPLING_VALUE		(1000000)
+#define DEF_TEMP_OBJ			(70000)
+#define DEF_SAMPLING_VALUE		(1000)
 
 /*
  * Struct of data for each CPU
@@ -121,7 +121,7 @@ static void update_discrete_values(struct cpu_info_s *this_info,
 		int k, int ti, int ts, int *A, int *B)
 {
 	long aux;
-	aux = (k*ts)/(ti<<1);
+	aux = (k*ts)/((ti*1000)<<1);
 	// Aproximamos exp a 1 dado que los valores son muy pequenyos
 	*A = aux;
 	*B = -aux;
@@ -195,15 +195,18 @@ static void dbs_check_cpu(struct cpu_info_s *this_info)
 	aux = ff*acum;
 	acum = acum - (temp_ac - t0);
 	error = acum;
-	acum = u1 + A*acum + B*e1;
+	acum = u1 + A*error + B*e1;
+	this_info->error1 = error;
+	this_info->u1 = long_int_to_int(acum);
+
+	printk(KERN_INFO "PID: pid calc %d\n", acum);
 
 	acum += aux;
 	acum += f0;
 
 	u = long_int_to_int(acum);
 
-	this_info->error1 = error;
-	this_info->u1 = u;
+	printk(KERN_INFO "PID: Type: %d Action: %d A: %d B: %d Temp: %d\n", type, u, A, B, temp_ac);
 
 	__cpufreq_driver_target(policy, u, CPUFREQ_RELATION_C);
 }
@@ -218,7 +221,7 @@ static void do_timer(struct work_struct *work)
 
 	/* We want all CPUs to do sampling nearly on same jiffy */
 	mutex_lock(&dbs_mutex);
-	delay = usecs_to_jiffies(dbs_tuners_ins.sampling_rate);
+	delay = usecs_to_jiffies(dbs_tuners_ins.sampling_rate*1000);
 	mutex_unlock(&dbs_mutex);
 
 	delay -= jiffies % delay;
