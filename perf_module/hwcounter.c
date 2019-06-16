@@ -82,26 +82,17 @@ u32 predictor_int(s64 mem, s64 integ, s64 inst)
 	aux1 = inter_int_ + (mem * mem_int_)/100 + (integ * integ_int_)/100;
 	aux2 = inter_mem_ + (mem * mem_mem_)/100 + (integ * integ_mem_)/100;
 	// With this comparations we made a fast implementation of the e number
-	if (aux1 >= 0) {
-		if (aux1 < 62) {
-			int_num = e_c << aux1;
-		} else {
-			int_num = (s64)(1) << 63;
-		}
-	} else {
+	if (aux1 >= 0)
+		if (aux1 < 62) int_num = e_c << aux1;
+		else int_num = (s64)(1) << 63;
+	else
 		int_num = 0;
-	}
 
-	if (aux2 >= 0) {
-		if (aux1 < 62) {
-			mem_num = e_c << aux1;
-		} else {
-			mem_num = (s64)(1) << 63;
-		}
-
-	} else {
+	if (aux2 >= 0)
+		if (aux1 < 62) mem_num = e_c << aux2;
+		else mem_num = (s64)(1) << 63;
+	else
 		mem_num = 0;
-	}
 
 	// Here we calculate the denominator
 	// 1 + e^(beta1 + x1*Y1 + x2*Y2) + e^(beta2 + x3*Y1 + x4*Y2)

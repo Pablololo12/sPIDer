@@ -120,11 +120,15 @@ int long_int_to_int(long long int big)
 static void update_discrete_values(struct cpu_info_s *this_info,
 		int k, int ti, int ts, int *A, int *B)
 {
-	long aux;
+	long aux, ki;
 	aux = (k*ts)/((ti*1000)<<1);
-	// Aproximamos exp a 1 dado que los valores son muy pequenyos
-	*A = aux;
-	*B = -aux;
+	// Aproximamos exp a 1 dado que los valores son muy pequenyo
+	
+	ki = k/(ti);
+	aux = (ki*ts)/2;
+
+	*A = ((k*1000)+aux)/1000;
+	*B = (-(k*1000)+aux)/1000;
 }
 
 /********************* PID controler *********************/
@@ -195,11 +199,11 @@ static void dbs_check_cpu(struct cpu_info_s *this_info)
 	aux = ff*acum;
 	acum = acum - (temp_ac - t0);
 	error = acum;
-	acum = u1 + A*error + B*e1;
+	acum = u1 + (A*error + B*e1)/1000;
 	this_info->error1 = error;
 	this_info->u1 = long_int_to_int(acum);
 
-	printk(KERN_INFO "PID: pid calc %d\n", acum);
+	printk(KERN_INFO "PID: pid calc %d error: %d\n", acum, error);
 
 	acum += aux;
 	acum += f0;
@@ -228,7 +232,8 @@ static void do_timer(struct work_struct *work)
 
 	dbs_check_cpu(dbs_info);
 
-	schedule_delayed_work_on(dbs_info->cpu, &dbs_info->work, delay);
+	//schedule_delayed_work_on(dbs_info->cpu, &dbs_info->work, delay);
+	schedule_delayed_work_on(4, &dbs_info->work, delay);
 }
 
 static inline void timer_init(struct cpu_info_s *dbs_info)
